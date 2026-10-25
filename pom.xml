@@ -29,7 +29,7 @@
         <java.version>25</java.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <spring-ai.version>2.0.2</spring-ai.version>
-        <awssdk.version>2.55.14</awssdk.version>
+        <awssdk.version>2.57.2</awssdk.version>
         <!-- Docker image coordinates: <artifactId>:<version>  ->  bedrock-mcp-springboot:0.1.0 -->
         <docker.image.name>${project.artifactId}</docker.image.name>
         <docker.image.tag>${project.version}</docker.image.tag>
