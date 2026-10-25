@@ -6,7 +6,7 @@
 # =====================================================================================
 
 # ---------- 1) Build ----------
-FROM maven:3.9.11-eclipse-temurin-25 AS build
+FROM maven:3.9-eclipse-temurin-26 AS build
 WORKDIR /workspace
 
 # Dependencies first -> cached layer while only sources change
