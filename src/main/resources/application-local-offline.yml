@@ -1,0 +1,21 @@
+# =====================================================================================
+#  LOCAL-OFFLINE profile - add on top of "local":  SPRING_PROFILES_ACTIVE=local,local-offline
+#  Zero AWS account needed: Ollama (tool-calling model) + LocalGuardrailService + Floci.
+#      docker compose --profile offline up -d   (starts Ollama)
+#      docker exec ollama ollama pull qwen3:8b
+# =====================================================================================
+spring:
+  ai:
+    model:
+      chat: ollama
+    ollama:
+      base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
+      chat:
+        model: ${OLLAMA_MODEL:qwen3:8b}
+        temperature: 0.2
+
+app:
+  aws:
+    credentials-mode: FLOCI
+  guardrail:
+    mode: LOCAL

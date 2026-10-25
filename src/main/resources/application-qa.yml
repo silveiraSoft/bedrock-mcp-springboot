@@ -1,0 +1,38 @@
+# =====================================================================================
+#  QA profile - ECS Fargate in the QA AWS account.
+#  Identity: ECS TASK ROLE (DefaultCredentialsProvider). No keys, no SSO, no secrets for AWS access.
+#  Every value below comes from the ECS task definition (Terraform). Secrets come from Secrets Manager
+#  through the task definition "secrets" block (=> env vars), never from this file.
+# =====================================================================================
+app:
+  aws:
+    region: ${AWS_REGION}
+    credentials-mode: DEFAULT
+  backend-api:
+    base-url: ${BACKEND_API_BASE_URL}
+  guardrail:
+    mode: BEDROCK
+    guardrail-id: ${GUARDRAIL_ID}
+    guardrail-version: ${GUARDRAIL_VERSION}   # a NUMBERED version, never DRAFT
+  security:
+    enabled: true
+  secrets:
+    enabled: false                            # ECS injects BACKEND_API_KEY etc. as env vars
+
+spring:
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${JWT_ISSUER_URI}       # https://cognito-idp.<region>.amazonaws.com/<userPoolId>
+  data:
+    redis:
+      host: ${REDIS_HOST}                     # ElastiCache Serverless for Valkey endpoint
+      port: ${REDIS_PORT:6379}
+      ssl:
+        enabled: true
+
+logging:
+  structured:
+    format:
+      console: ecs                            # JSON logs -> CloudWatch Logs Insights friendly

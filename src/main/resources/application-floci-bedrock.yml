@@ -1,0 +1,14 @@
+# =====================================================================================
+#  FLOCI-BEDROCK profile - add on top of "local":  SPRING_PROFILES_ACTIVE=local,floci-bedrock
+#  Sends Bedrock Converse calls to Floci's Bedrock Runtime emulator.
+#
+#  Useful ONLY for wiring / smoke tests (CI without AWS): Floci's stub returns a fixed answer and does
+#  not round-trip tool use; ApplyGuardrail is not emulated (we use the LOCAL guardrail).
+#  Floci "proxy" backend can forward Converse to an OpenAI-compatible server (e.g. Ollama) - see README.
+# =====================================================================================
+app:
+  aws:
+    credentials-mode: FLOCI
+    bedrock-endpoint: ${FLOCI_ENDPOINT:http://localhost:4566}
+  guardrail:
+    mode: LOCAL

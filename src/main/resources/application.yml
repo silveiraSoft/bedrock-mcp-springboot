@@ -1,0 +1,98 @@
+# =====================================================================================
+#  bedrock-mcp-springboot - BASE configuration (shared by every environment)
+#  Profiles:  local | local,local-offline | local,floci-bedrock | qa | prod
+#  Rule: secrets NEVER live in this file. Use env vars injected by ECS from Secrets Manager.
+# =====================================================================================
+spring:
+  application:
+    name: bedrock-mcp-springboot
+  threads:
+    virtual:
+      enabled: true                 # Java 25 virtual threads: cheap blocking I/O for LLM + REST calls
+  lifecycle:
+    timeout-per-shutdown-phase: 30s # ECS sends SIGTERM, then SIGKILL after stopTimeout (set 60s in task def)
+
+  # ---------- Spring AI ----------
+  ai:
+    model:
+      chat: bedrock-converse        # MUST be explicit: two chat starters are on the classpath (bedrock + ollama)
+      embedding: none
+    bedrock:
+      converse:
+        chat:
+          model: ${BEDROCK_MODEL_ID:us.anthropic.claude-haiku-4-5-20251001-v1:0}
+          temperature: 0.2
+          max-tokens: 1024
+          cache-options:
+            strategy: SYSTEM_AND_TOOLS # Bedrock prompt caching for system prompt + tool schemas (cost/latency)
+    mcp:
+      server:
+        name: bedrock-mcp-springboot
+        version: '@project.version@'
+        type: SYNC
+        protocol: STATELESS         # horizontal scaling on Fargate behind ALB/API GW without sticky sessions
+        instructions: >
+          Tools to search the product catalog, read product details and create orders through the company REST API.
+
+  # ---------- Cache ----------
+  cache:
+    type: redis
+    cache-names: product,product-search
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      ssl:
+        enabled: ${REDIS_SSL:false}
+      timeout: 2s
+
+server:
+  port: 8080
+  shutdown: graceful
+  forward-headers-strategy: framework # behind ALB / API Gateway
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true               # /actuator/health/liveness and /readiness for ECS/ALB
+      show-details: never
+  info:
+    build:
+      enabled: true
+
+logging:
+  level:
+    root: INFO
+    io.github.adalberto.bedrockmcp: INFO
+
+# ---------- Application ----------
+app:
+  aws:
+    region: ${AWS_REGION:us-east-1}
+    credentials-mode: DEFAULT       # DEFAULT | PROFILE | STATIC | FLOCI  (see AwsClientsConfig)
+    api-call-timeout: 60s
+  backend-api:
+    base-url: ${BACKEND_API_BASE_URL:http://localhost:8080}
+    connect-timeout: 2s
+    read-timeout: 10s
+    propagate-authorization: true
+  guardrail:
+    mode: LOCAL                     # BEDROCK in qa/prod
+    guardrail-version: DRAFT
+    check-output: true
+    blocked-message: "Sorry, I can't help with that request. I can help you with products and orders."
+    denied-topics:
+      - investment advice
+      - medical diagnosis
+  chat:
+    system-prompt-location: classpath:prompts/system-prompt.st
+    max-user-message-chars: 4000
+  security:
+    enabled: false
+  secrets:
+    enabled: false

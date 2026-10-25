@@ -1,0 +1,48 @@
+# =====================================================================================
+#  LOCAL profile  (IDE or docker compose)
+#
+#  Hybrid by design (see docs/adr/0006-local-floci-hybrid.md):
+#    - Floci (AWS emulator, :4566)  -> Secrets Manager   (emulated, free, offline)
+#    - Valkey (:6379)               -> cache             (same protocol as ElastiCache for Valkey)
+#    - REAL Amazon Bedrock          -> LLM + Guardrails  (Floci only stubs Bedrock Runtime and does not
+#                                      support ApplyGuardrail, so real AI behaviour needs a real account)
+#
+#  Identity for real Bedrock: IAM Identity Center (AWS SSO). No access keys on disk:
+#      aws configure sso --profile bedrock-dev     (once)
+#      aws sso login --profile bedrock-dev         (each day)
+#      set AWS_PROFILE=bedrock-dev                 (Windows)  |  export AWS_PROFILE=bedrock-dev  (bash)
+#
+#  No AWS account at all?  Run with:  SPRING_PROFILES_ACTIVE=local,local-offline   (Ollama + local guardrail)
+# =====================================================================================
+app:
+  aws:
+    region: ${AWS_REGION:us-east-1}
+    # DEFAULT resolves AWS_PROFILE (SSO) automatically. Use PROFILE + profile to pin one explicitly.
+    credentials-mode: ${AWS_CREDENTIALS_MODE:DEFAULT}
+    profile: ${AWS_PROFILE:bedrock-dev}
+    # Emulated services -> Floci. Leave bedrock-endpoint EMPTY to use real Bedrock.
+    secrets-manager-endpoint: ${FLOCI_ENDPOINT:http://localhost:4566}
+    bedrock-endpoint: ${BEDROCK_ENDPOINT:}
+  backend-api:
+    base-url: ${BACKEND_API_BASE_URL:http://localhost:8080}
+  guardrail:
+    # LOCAL works offline. Set BEDROCK + GUARDRAIL_ID once you created the guardrail (docs/runbooks/guardrail-setup.md)
+    mode: ${GUARDRAIL_MODE:LOCAL}
+    guardrail-id: ${GUARDRAIL_ID:}
+    guardrail-version: ${GUARDRAIL_VERSION:DRAFT}
+  security:
+    enabled: false
+  secrets:
+    enabled: true
+    secret-id: ${APP_SECRET_ID:bedrock-mcp-springboot/local/app}   # created by scripts/floci-init.sh
+
+spring:
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
+logging:
+  level:
+    io.github.adalberto.bedrockmcp: DEBUG
+    org.springframework.ai: INFO

@@ -1,0 +1,104 @@
+# =====================================================================================
+#  Local environment for bedrock-mcp-springboot
+#
+#  Infra only (run the app from IntelliJ with profile "local"):
+#      docker compose up -d
+#  Infra + app container (bedrock-mcp-springboot:<version>):
+#      docker compose --profile app up -d --build
+#  Fully offline (no AWS account): Ollama + local guardrail
+#      docker compose --profile offline --profile app up -d --build
+#      (set SPRING_PROFILES_ACTIVE=local,local-offline in .env)
+# =====================================================================================
+name: bedrock-mcp-springboot
+
+services:
+  # ---- Floci: free, open-source AWS emulator (Secrets Manager, SSM, DynamoDB, Bedrock stub...) ----
+  floci:
+    image: floci/floci:${FLOCI_TAG:-latest}     # pin a release tag (e.g. 1.6.0) for reproducible builds
+    container_name: floci
+    ports:
+      - "4566:4566"
+    environment:
+      AWS_DEFAULT_REGION: ${AWS_REGION:-us-east-1}
+      # Bedrock Runtime emulation: "stub" (fixed answer) or "proxy" (forward to an OpenAI-compatible server)
+      FLOCI_SERVICES_BEDROCK_RUNTIME_BACKEND: ${FLOCI_BEDROCK_BACKEND:-stub}
+      FLOCI_SERVICES_BEDROCK_RUNTIME_PROXY_URL: ${FLOCI_BEDROCK_PROXY_URL:-http://ollama:11434/v1}
+      FLOCI_SERVICES_BEDROCK_RUNTIME_PROXY_DEFAULT_MODEL: ${OLLAMA_MODEL:-qwen3:8b}
+
+  # ---- One-shot init: creates the app secret in Floci Secrets Manager ----
+  floci-init:
+    image: amazon/aws-cli:${AWS_CLI_TAG:-latest}
+    container_name: floci-init
+    depends_on:
+      - floci
+    entrypoint: ["/bin/sh", "/init/floci-init.sh"]
+    environment:
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_DEFAULT_REGION: ${AWS_REGION:-us-east-1}
+      AWS_ENDPOINT_URL: http://floci:4566
+      APP_SECRET_ID: ${APP_SECRET_ID:-bedrock-mcp-springboot/local/app}
+    volumes:
+      - ./scripts/floci-init.sh:/init/floci-init.sh:ro
+
+  # ---- Cache: Valkey (same engine as ElastiCache Serverless for Valkey) ----
+  valkey:
+    image: valkey/valkey:${VALKEY_TAG:-8-alpine}
+    container_name: valkey
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # ---- Optional: local LLM for the offline profile ----
+  ollama:
+    image: ollama/ollama:${OLLAMA_TAG:-latest}
+    container_name: ollama
+    profiles: ["offline"]
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-models:/root/.ollama
+
+  # ---- The application: container name = project name, image = name:version ----
+  bedrock-mcp-springboot:
+    profiles: ["app"]
+    build:
+      context: .
+      args:
+        APP_VERSION: ${APP_VERSION:-0.1.0}
+    image: bedrock-mcp-springboot:${APP_VERSION:-0.1.0}
+    container_name: bedrock-mcp-springboot
+    depends_on:
+      floci-init:
+        condition: service_completed_successfully
+      valkey:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-local}
+      FLOCI_ENDPOINT: http://floci:4566
+      REDIS_HOST: valkey
+      OLLAMA_BASE_URL: http://ollama:11434
+      BACKEND_API_BASE_URL: http://localhost:8080
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      AWS_PROFILE: ${AWS_PROFILE:-bedrock-dev}
+      AWS_CONFIG_FILE: /home/spring/.aws/config
+      AWS_SHARED_CREDENTIALS_FILE: /home/spring/.aws/credentials
+      GUARDRAIL_MODE: ${GUARDRAIL_MODE:-LOCAL}
+      GUARDRAIL_ID: ${GUARDRAIL_ID:-}
+      GUARDRAIL_VERSION: ${GUARDRAIL_VERSION:-DRAFT}
+    volumes:
+      # IAM Identity Center (SSO) session from the host: run `aws sso login --profile bedrock-dev` first.
+      # Read-write because the SDK refreshes the SSO token cache. Windows: AWS_DIR=C:/Users/<you>/.aws
+      - ${AWS_DIR:-~/.aws}:/home/spring/.aws
+
+volumes:
+  ollama-models:

@@ -1,0 +1,38 @@
+# =====================================================================================
+#  PROD profile - ECS Fargate (ARM64/Graviton) in the PROD AWS account. Same contract as QA.
+# =====================================================================================
+app:
+  aws:
+    region: ${AWS_REGION}
+    credentials-mode: DEFAULT
+  backend-api:
+    base-url: ${BACKEND_API_BASE_URL}
+  guardrail:
+    mode: BEDROCK
+    guardrail-id: ${GUARDRAIL_ID}
+    guardrail-version: ${GUARDRAIL_VERSION}
+    check-output: true
+  security:
+    enabled: true
+  secrets:
+    enabled: false
+
+spring:
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${JWT_ISSUER_URI}
+  data:
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT:6379}
+      ssl:
+        enabled: true
+
+logging:
+  structured:
+    format:
+      console: ecs
+  level:
+    io.github.adalberto.bedrockmcp: INFO
